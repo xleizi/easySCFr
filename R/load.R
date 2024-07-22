@@ -170,6 +170,20 @@ sce_add_h5_to_reductions <- function(sce, h5, cellNames, assay = "RNA", reductio
   return(sce)
 }
 
+#' readH5
+#'
+#' @param FileName
+#' @param assay
+#' @param SeuratVersion
+#' @param calData
+#' @param calScale
+#' @param calFeatures
+#' @param readType
+#'
+#' @return
+#' @export
+#'
+#' @examples
 readH5 <- function(FileName,
                    assay = "RNA",
                    SeuratVersion = checkSeuratVersion(),
