@@ -56,7 +56,7 @@ X_to_h5 <- function(
 }
 
 reductions_to_h5 <- function(sce, h5file, group_path) {
-  reductionsh5 <- h5$create_group(group_path)
+  reductionsh5 <- h5file$create_group(group_path)
   h5AddAttribute(reductionsh5, "encoding-type", "dict")
   h5AddAttribute(reductionsh5, "encoding-version", "0.1.0")
   for (name in names(sce@reductions)) {
