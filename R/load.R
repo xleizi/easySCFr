@@ -190,7 +190,7 @@ readH5 <- function(FileName,
                    calData = TRUE,
                    calScale = FALSE,
                    calFeatures = FALSE,
-                   readType = "Seurat") {
+                   datatype = "Seurat") {
   options(warn = -1)
   h5 <- openH5(FileName)
   tryCatch(
@@ -205,7 +205,7 @@ readH5 <- function(FileName,
     }
   )
 
-  if (readType == "Seurat") {
+  if (datatype == "Seurat") {
     return(sce)
   }
 }
