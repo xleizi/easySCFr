@@ -37,8 +37,7 @@ df_to_h5 <- function(h5data, df) {
 X_to_h5 <- function(
     sce_X, h5data, data_name = "data",
     split_save = TRUE,
-    max_cells_per_subset = 5000,
-    encoding_version = "0.2.0") {
+    max_cells_per_subset = 5000) {
   if (nrow(sce_X) == 0 | ncol(sce_X) == 0) {
     return(NULL)
   }
@@ -49,10 +48,10 @@ X_to_h5 <- function(
   if ("Graph" %in% class(sce_X)) {
     sce_X <- as(sce_X, "RsparseMatrix")
   }
-  if ("matrix" %in% class(sce_X)) {
+  if ("matrix" %in% class(sce_X) | attr(class(sce@assays$RNA$counts), "package") == "BPCells") {
     sce_X <- t(sce_X)
   }
-  handle_data_splitting(sce_X, h5data, data_name, split_save, max_cells_per_subset, encoding_version)
+  handle_data_splitting(sce_X, h5data, data_name, split_save, max_cells_per_subset)
 }
 
 reductions_to_h5 <- function(sce, h5file, group_path) {
@@ -84,12 +83,10 @@ graphs_to_h5 <- function(sce, h5file, group_path) {
 handle_data_splitting <- function(
     sce_X, h5data, data_name,
     split_save = TRUE,
-    max_cells_per_subset = 5000,
-    encoding_version = "0.2.0") {
-
+    max_cells_per_subset = 5000) {
   h5data_Name <- h5data$create_group(data_name)
   h5AddAttribute(h5data_Name, "encoding-type", "csr_matrix")
-  h5AddAttribute(h5data_Name, "encoding-version", encoding_version)
+  h5AddAttribute(h5data_Name, "encoding-version", "0.1.0")
   h5AddAttribute(h5data_Name, "shape", dim(sce_X))
 
 
@@ -100,7 +97,7 @@ handle_data_splitting <- function(
   }
   if (split_save) {
     num_subsets <- ceiling(num_cells / max_cells_per_subset)
-    i <- 1
+    # i <- 1
     for (i in 1:num_subsets) {
       start_idx <- ((i - 1) * max_cells_per_subset) + 1
       end_idx <- min(i * max_cells_per_subset, num_cells)
@@ -114,21 +111,27 @@ handle_data_splitting <- function(
 }
 
 # 插入稀疏矩阵
-write_matrix <- function(h5data, matrix, name, encoding_version = "0.2.0") {
+write_matrix <- function(h5data, matrix, name) {
+  if (attr(class(sce@assays$RNA$counts), "package") == "BPCells") {
+    # matrix <- as(matrix, "dgRMatrix")
+    # matrix <- as(matrix, "RsparseMatrix")
+    matrix <- as(matrix, "sparseMatrix")
+    matrix <- as(matrix, "RsparseMatrix")
+  }
   if ("matrix" %in% class(matrix)) {
     h5data[[name]] <- matrix
     h5AddAttribute(h5data[[name]], "encoding-type", "array")
-    h5AddAttribute(h5data[[name]], "encoding-version", encoding_version)
+    h5AddAttribute(h5data[[name]], "encoding-version", "0.2.0")
     h5AddAttribute(h5data[[name]], "shape", dim(matrix))
-  }else if ("dgRMatrix" %in% class(matrix)) {
+  } else if ("dgRMatrix" %in% class(matrix)) {
     h5data_sub <- h5data$create_group(name)
     h5data_sub[["data"]] <- slot(object = matrix, name = "x")
     h5data_sub[["indices"]] <- slot(object = matrix, name = "j")
     h5data_sub[["indptr"]] <- slot(object = matrix, name = "p")
     h5AddAttribute(h5data_sub, "encoding-type", "csr_matrix")
-    h5AddAttribute(h5data_sub, "encoding-version", encoding_version)
+    h5AddAttribute(h5data_sub, "encoding-version", "0.1.0")
     h5AddAttribute(h5data_sub, "shape", dim(matrix))
-  }else {
+  } else {
     print(paste0("Error in writing matrix: ", class(matrix)))
   }
 }
@@ -168,11 +171,11 @@ commands_to_h5 <- function(data, h5file, group_path) {
       item <- capture.output(item)
       item <- paste(item, collapse = "\n")
       group[[key]] <- item
-    } else if (is.function(item))  {
+    } else if (is.function(item)) {
       data_type <- h5file$create_type("string", size = nchar(item))
       dataset <- group$create_dataset(key, dtype = data_type, dims = 1)
       group[[key]] <- item
-    }else {
+    } else {
       group[[key]] <- item
     }
   }
@@ -187,7 +190,6 @@ commands_to_h5 <- function(data, h5file, group_path) {
 #' @param SeuratVersion
 #' @param split_save
 #' @param max_cells_per_subset
-#' @param encoding_version
 #'
 #' @return
 #' @export
@@ -197,10 +199,9 @@ saveH5 <- function(FileName, data, assay = "RNA",
                    save_graph = TRUE,
                    SeuratVersion = checkSeuratVersion(),
                    split_save = TRUE,
-                   max_cells_per_subset = 5000,
-                   encoding_version = "0.2.0") {
-  if("Seurat" %in% class(data)) {
-    Seurat_to_H5(FileName, data, assay = assay, save_graph = save_graph, SeuratVersion = SeuratVersion, split_save = split_save, max_cells_per_subset = max_cells_per_subset, encoding_version = encoding_version)
+                   max_cells_per_subset = 5000) {
+  if ("Seurat" %in% class(data)) {
+    Seurat_to_H5(FileName, data, assay = assay, save_graph = save_graph, SeuratVersion = SeuratVersion, split_save = split_save, max_cells_per_subset = max_cells_per_subset)
   }
 }
 
@@ -208,8 +209,7 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
                          save_graph = TRUE,
                          SeuratVersion = checkSeuratVersion(),
                          split_save = TRUE,
-                         max_cells_per_subset = 5000,
-                         encoding_version = "0.2.0") {
+                         max_cells_per_subset = 5000) {
   if (SeuratVersion == 5) {
     if ("Assay" %in% class(sce[[assay]])) {
       sce[[assay]] <- as(object = sce[[assay]], Class = "Assay5")
@@ -229,23 +229,25 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     scaleData <- SeuratObject::GetAssayData(object = sce, assay = assay, slot = "scale.data")
     # var
     varObjName <- "meta.features"
-  }else if (SeuratVersion == 5) {
+  } else if (SeuratVersion == 5) {
     rawData <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = "counts")
     scaleData <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = "scale.data")
     # var
     varObjName <- "meta.data"
   }
 
+  # sce_X = rawData
+  # h5data = layersList
+  # data_name = "rawdata"
+
   X_to_h5(
     sce_X = rawData, h5data = layersList, data_name = "rawdata",
-    split_save = split_save, max_cells_per_subset = max_cells_per_subset,
-    encoding_version = encoding_version
+    split_save = split_save, max_cells_per_subset = max_cells_per_subset
   )
 
   X_to_h5(
     sce_X = scaleData, h5data = layersList, data_name = "data",
-    split_save = split_save, max_cells_per_subset = max_cells_per_subset,
-    encoding_version = encoding_version
+    split_save = split_save, max_cells_per_subset = max_cells_per_subset
   )
 
   # var
@@ -266,8 +268,16 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   df_to_h5(obs, sce@meta.data)
 
   # reductions
-  if(length(sce@reductions) > 0) {
+  if (length(sce@reductions) > 0) {
     reductions_to_h5(sce, h5, "reductions")
+    # tryCatch(
+    #     {
+    #         reductions_to_h5(sce, h5, "reductions")
+    #     },
+    #     error = function(e) {
+    #         print(paste0("Error in writing reductions: ", e))
+    #     }
+    # )
   }
 
 
@@ -283,4 +293,3 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   commands_to_h5(sce@commands, h5, "uns")
   h5$close_all()
 }
-

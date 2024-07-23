@@ -16,26 +16,63 @@ read_matrice_matrix <- function(h5data) {
   }
 }
 
-read_matrix <- function(h5layer) {
+read_matrix <- function(h5layer, useBPcells = FALSE, cellNames = NULL, geneNames = NULL) {
   data_list <- list()
   for (name in names(h5layer)) {
     group_h5layer <- h5layer[[name]]
     if (getEncodingType(h5layer) == "array") {
       data_list[[name]] <- group_h5layer[, ]
     } else {
-      data_list[[name]] <- read_matrice_matrix(group_h5layer)
+      if (useBPcells) {
+        data_list[[name]] <- as(read_matrice_matrix(group_h5layer), "IterableMatrix")
+      } else {
+        data_list[[name]] <- read_matrice_matrix(group_h5layer)
+      }
     }
   }
+
   all_data <- do.call(cbind, data_list)
+  if (!is.null(cellNames)) {
+    colnames(all_data) <- cellNames
+  }
+  if (!is.null(geneNames)) {
+    rownames(all_data) <- geneNames
+  }
   return(all_data)
 }
 
-h5_to_X <- function(h5, assay = "RNA", layer = "rawdata") {
+
+h5_to_X <- function(h5, assay = "RNA", layer = "rawdata", useBPcells = FALSE, useDisk = TRUE, cellNames = NULL, geneNames = NULL) {
+  if (is.null(cellNames)) {
+    cellNames <- h5[["obs"]][["_index"]][]
+  }
+
+  if (is.null(geneNames)) {
+    geneNames <- h5[["var"]][[varType]][["_index"]][]
+  }
+
   h5layer <- h5[["assay"]][[assay]][["layers"]][[layer]]
+  if (length(names(h5layer)) > 200) {
+    print("The number of layers is too large. using BPCells to load the data.")
+    useBPcells <- TRUE
+  }
+  if (useBPcells) {
+    if (!require(BPCells)) {
+      stop("The number of layers is too large. But the BPCells package not installed.")
+    }
+  }
+
   varType <- if (layer == "rawdata") "rawvar" else "var"
-  X <- read_matrix(h5layer)
-  colnames(X) <- h5[["obs"]][["_index"]][]
-  rownames(X) <- h5[["var"]][[varType]][["_index"]][]
+  X <- read_matrix(h5layer, useBPcells = useBPcells, cellNames = cellNames, geneNames = geneNames)
+  if (useDisk & useBPcells) {
+    diskFile <- sprintf("./.BPCells_dont_delete/%s/%s/%s", sub(".h5", "", basename(h5$filename)), assay, layer)
+    if (dir.exists(diskFile)) {
+      print("The data has been cached in disk. Delete the cache file to resave the data.")
+      unlink(diskFile, recursive = TRUE)
+    }
+    write_matrix_dir(X, diskFile)
+    X <- open_matrix_dir(diskFile)
+  }
   return(X)
 }
 
@@ -74,6 +111,7 @@ h5_to_DF <- function(h5data) {
 
   return(df)
 }
+
 
 openH5 <- function(FileName) {
   if (!hdf5r::is_hdf5(FileName)) {
@@ -130,14 +168,17 @@ h5_to_obs <- function(h5, obsName = "obs") {
 
 sce_add_h5_to_graphs <- function(sce, h5, cellNames, graphsName = "graphs") {
   for (name in names(h5[[graphsName]])) {
-    tryCatch({
-      Graphmt <- read_matrice_matrix(h5[[graphsName]][[name]])
-      rownames(Graphmt) <- cellNames
-      colnames(Graphmt) <- cellNames
-      sce@graphs[[name]] <- Seurat::as.Graph(Graphmt)
-    }, error = function(e) {
-      print(paste0("Error in reading graph ", name, ": ", e$message))
-    })
+    tryCatch(
+      {
+        Graphmt <- read_matrice_matrix(h5[[graphsName]][[name]])
+        rownames(Graphmt) <- cellNames
+        colnames(Graphmt) <- cellNames
+        sce@graphs[[name]] <- Seurat::as.Graph(Graphmt)
+      },
+      error = function(e) {
+        print(paste0("Error in reading graph ", name, ": ", e$message))
+      }
+    )
   }
   return(sce)
 }
@@ -155,17 +196,20 @@ sce_add_h5_to_var <- function(sce, h5, assay, varName = "var", SeuratVersion = c
 
 sce_add_h5_to_reductions <- function(sce, h5, cellNames, assay = "RNA", reductionsName = "reductions") {
   for (name in names(h5[[reductionsName]])) {
-    tryCatch({
-      matrix <- h5[[reductionsName]][[name]][, ]
-      colnames(matrix) <- cellNames
-      sce@reductions[[name]] <- Seurat::CreateDimReducObject(
-        embeddings = t(matrix),
-        key = paste0(name, "_"),
-        assay = assay
-      )
-    }, error = function(e) {
-      print(paste0("Error in reading reductions ", name, ": ", e$message))
-    })
+    tryCatch(
+      {
+        matrix <- h5[[reductionsName]][[name]][, ]
+        colnames(matrix) <- cellNames
+        sce@reductions[[name]] <- Seurat::CreateDimReducObject(
+          embeddings = t(matrix),
+          key = paste0(name, "_"),
+          assay = assay
+        )
+      },
+      error = function(e) {
+        print(paste0("Error in reading reductions ", name, ": ", e$message))
+      }
+    )
   }
   return(sce)
 }
@@ -187,15 +231,17 @@ sce_add_h5_to_reductions <- function(sce, h5, cellNames, assay = "RNA", reductio
 loadH5 <- function(FileName,
                    assay = "RNA",
                    SeuratVersion = checkSeuratVersion(),
+                   useBPcells = FALSE,
+                   useDisk = TRUE,
                    calData = TRUE,
                    calScale = FALSE,
                    calFeatures = FALSE,
-                   datatype = "Seurat") {
+                   readType = "Seurat") {
   options(warn = -1)
   h5 <- openH5(FileName)
   tryCatch(
     {
-      sce <- h5_to_seurat(h5, assay, SeuratVersion, calData, calScale, calFeatures)
+      sce <- h5_to_seurat(h5, assay, SeuratVersion, useBPcells = useBPcells, useDisk = useDisk, calData, calScale, calFeatures)
     },
     error = function(e) {
       print(e)
@@ -205,7 +251,7 @@ loadH5 <- function(FileName,
     }
   )
 
-  if (datatype == "Seurat") {
+  if (readType == "Seurat") {
     return(sce)
   }
 }
@@ -213,6 +259,8 @@ loadH5 <- function(FileName,
 h5_to_seurat <- function(h5,
                          assay = "RNA",
                          SeuratVersion = checkSeuratVersion(),
+                         useBPcells = FALSE,
+                         useDisk = TRUE,
                          calData = TRUE,
                          calScale = FALSE,
                          calFeatures = FALSE) {
@@ -223,8 +271,11 @@ h5_to_seurat <- function(h5,
   # 2 如果不存在data, rawdata -> sce@counts
   # assay
   layersNames <- names(h5[["assay"]][[assay]][["layers"]])
-  rawX <- h5_to_X(h5, assay, "rawdata")
+  layer <- "rawdata"
+  rawX <- h5_to_X(h5, assay, layer = "rawdata", useBPcells = useBPcells, useDisk = useDisk, cellNames = cellNames, geneNames = geneNames)
   sce <- Seurat::CreateSeuratObject(counts = rawX, assay = assay, project = "scanpy")
+
+
   if (calData) {
     sce <- Seurat::NormalizeData(sce)
   }
@@ -301,7 +352,7 @@ h5_to_seurat <- function(h5,
 
   # JoinLayers
   if (SeuratVersion == 5) {
-    if(exists("scaleX") && all(dim(scaleX) == dim(sce))){
+    if (exists("scaleX") && all(dim(scaleX) == dim(sce))) {
       sce <- SeuratObject::JoinLayers(sce, assay = assay)
     }
   }
