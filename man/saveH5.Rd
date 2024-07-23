@@ -11,12 +11,11 @@ saveH5(
   save_graph = TRUE,
   SeuratVersion = checkSeuratVersion(),
   split_save = TRUE,
-  max_cells_per_subset = 5000,
-  encoding_version = "0.2.0"
+  max_cells_per_subset = 5000
 )
 }
 \arguments{
-\item{encoding_version}{}
+\item{max_cells_per_subset}{}
 }
 \description{
 saveH5

@@ -8,10 +8,12 @@ loadH5(
   FileName,
   assay = "RNA",
   SeuratVersion = checkSeuratVersion(),
+  useBPcells = FALSE,
+  useDisk = TRUE,
   calData = TRUE,
   calScale = FALSE,
   calFeatures = FALSE,
-  datatype = "Seurat"
+  readType = "Seurat"
 )
 }
 \arguments{
