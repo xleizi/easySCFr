@@ -112,7 +112,7 @@ handle_data_splitting <- function(
 
 # 插入稀疏矩阵
 write_matrix <- function(h5data, matrix, name) {
-  if (attr(class(sce@assays$RNA$counts), "package") == "BPCells") {
+  if (attr(class(matrix), "package") == "BPCells") {
     # matrix <- as(matrix, "dgRMatrix")
     # matrix <- as(matrix, "RsparseMatrix")
     matrix <- as(matrix, "sparseMatrix")
