@@ -48,7 +48,7 @@ X_to_h5 <- function(
   if ("Graph" %in% class(sce_X)) {
     sce_X <- as(sce_X, "RsparseMatrix")
   }
-  if ("matrix" %in% class(sce_X) | attr(class(sce@assays$RNA$counts), "package") == "BPCells") {
+  if ("matrix" %in% class(sce_X) | attr(class(sce_X), "package") == "BPCells") {
     sce_X <- t(sce_X)
   }
   handle_data_splitting(sce_X, h5data, data_name, split_save, max_cells_per_subset)
@@ -239,7 +239,6 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   # sce_X = rawData
   # h5data = layersList
   # data_name = "rawdata"
-
   X_to_h5(
     sce_X = rawData, h5data = layersList, data_name = "rawdata",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
