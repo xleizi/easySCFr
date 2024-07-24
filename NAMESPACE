@@ -2,4 +2,3 @@
 
 export(loadH5)
 export(saveH5)
-export(testF)
