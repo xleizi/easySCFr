@@ -51,7 +51,7 @@ X_to_h5 <- function(
   print("==============")
   print(sce_X)
   print(class(sce_X))
-  print(class(attr(class(sce_X), "package")))
+  print(attr(class(sce_X), "package"))
   if ("matrix" %in% class(sce_X) | attr(class(sce_X), "package") == "BPCells") {
     sce_X <- t(sce_X)
   }
