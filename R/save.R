@@ -305,6 +305,7 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
 #'
 #' @examples
 testF <- function(sce, assay = "RNA"){
+  library(BPCells)
   rawData <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = "counts")
   rawData <- t(rawData)
   return(rawData)
