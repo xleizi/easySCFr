@@ -49,6 +49,9 @@ X_to_h5 <- function(
     sce_X <- as(sce_X, "RsparseMatrix")
   }
   print("==============")
+  print(sce_X)
+  print(class(sce_X))
+  print(class(attr(class(sce_X), "package")))
   if ("matrix" %in% class(sce_X) | attr(class(sce_X), "package") == "BPCells") {
     sce_X <- t(sce_X)
   }
