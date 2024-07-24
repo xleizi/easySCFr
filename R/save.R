@@ -239,6 +239,7 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   # sce_X = rawData
   # h5data = layersList
   # data_name = "rawdata"
+  print(("=============="))
   X_to_h5(
     sce_X = rawData, h5data = layersList, data_name = "rawdata",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
