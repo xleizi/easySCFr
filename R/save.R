@@ -294,3 +294,18 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   commands_to_h5(sce@commands, h5, "uns")
   h5$close_all()
 }
+
+#' testF
+#'
+#' @param sce
+#' @param assay
+#'
+#' @return
+#' @export
+#'
+#' @examples
+testF <- function(sce, assay = "RNA"){
+  rawData <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = "counts")
+  rawData <- t(rawData)
+  return(rawData)
+}
