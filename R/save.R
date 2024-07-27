@@ -48,8 +48,10 @@ X_to_h5 <- function(
   if ("Graph" %in% class(sce_X)) {
     sce_X <- as(sce_X, "RsparseMatrix")
   }
-  if ("matrix" %in% class(sce_X) | attr(class(sce_X), "package") == "BPCells") {
-    sce_X <- Matrix::t(sce_X)
+  if (!is.null(attr(class(sce_X), "package"))) {
+    if ("matrix" %in% class(sce_X) | attr(class(sce_X), "package") == "BPCells") {
+      sce_X <- Matrix::t(sce_X)
+    }
   }
   handle_data_splitting(sce_X, h5data, data_name, split_save, max_cells_per_subset)
 }
