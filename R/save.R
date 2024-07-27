@@ -48,11 +48,15 @@ X_to_h5 <- function(
   if ("Graph" %in% class(sce_X)) {
     sce_X <- as(sce_X, "RsparseMatrix")
   }
+  if ("matrix" %in% class(sce_X)) {
+    sce_X <- Matrix::t(sce_X)
+  }
   if (!is.null(attr(class(sce_X), "package"))) {
-    if ("matrix" %in% class(sce_X) | attr(class(sce_X), "package") == "BPCells") {
+    if (attr(class(sce_X), "package") == "BPCells") {
       sce_X <- Matrix::t(sce_X)
     }
   }
+
   handle_data_splitting(sce_X, h5data, data_name, split_save, max_cells_per_subset)
 }
 
@@ -86,8 +90,18 @@ handle_data_splitting <- function(
     sce_X, h5data, data_name,
     split_save = TRUE,
     max_cells_per_subset = 5000) {
+  if ("dgRMatrix" %in% class(sce_X)) {
+    Xclass <- "csr_matrix"
+  } else if ("dgCMatrix" %in% class(sce_X)) {
+    Xclass <- "csc_matrix"
+  } else if ("array" %in% class(sce_X)) {
+    Xclass <- "array"
+  } else {
+    Xclass <- "csr_matrix"
+  }
+
   h5data_Name <- h5data$create_group(data_name)
-  h5AddAttribute(h5data_Name, "encoding-type", "csr_matrix")
+  h5AddAttribute(h5data_Name, "encoding-type", Xclass)
   h5AddAttribute(h5data_Name, "encoding-version", "0.1.0")
   h5AddAttribute(h5data_Name, "shape", dim(sce_X))
 
@@ -114,12 +128,16 @@ handle_data_splitting <- function(
 
 # 插入稀疏矩阵
 write_matrix <- function(h5data, matrix, name) {
-  if (attr(class(matrix), "package") == "BPCells") {
-    # matrix <- as(matrix, "dgRMatrix")
-    # matrix <- as(matrix, "RsparseMatrix")
-    matrix <- as(matrix, "sparseMatrix")
-    matrix <- as(matrix, "RsparseMatrix")
+  if (!is.null(attr(class(matrix), "package"))) {
+    if (attr(class(matrix), "package") == "BPCells") {
+      # matrix <- as(matrix, "dgRMatrix")
+      # matrix <- as(matrix, "RsparseMatrix")
+      matrix <- as(matrix, "sparseMatrix")
+      matrix <- as(matrix, "RsparseMatrix")
+    }
   }
+
+
   if ("matrix" %in% class(matrix)) {
     h5data[[name]] <- matrix
     h5AddAttribute(h5data[[name]], "encoding-type", "array")
@@ -202,8 +220,9 @@ saveH5 <- function(FileName, data, assay = "RNA",
                    SeuratVersion = checkSeuratVersion(),
                    split_save = TRUE,
                    max_cells_per_subset = 5000) {
+  data <- Seurat_to_H5(FileName, data, assay = assay, save_graph = save_graph, SeuratVersion = SeuratVersion, split_save = split_save, max_cells_per_subset = max_cells_per_subset)
   if ("Seurat" %in% class(data)) {
-    Seurat_to_H5(FileName, data, assay = assay, save_graph = save_graph, SeuratVersion = SeuratVersion, split_save = split_save, max_cells_per_subset = max_cells_per_subset)
+    return(data)
   }
 }
 
@@ -245,7 +264,10 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     sce_X = rawData, h5data = layersList, data_name = "rawdata",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
   )
-
+  # class(scaleData)
+  # sce_X = scaleData
+  # h5data = layersList
+  # data_name = "data"
   X_to_h5(
     sce_X = scaleData, h5data = layersList, data_name = "data",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
@@ -294,4 +316,3 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   commands_to_h5(sce@commands, h5, "uns")
   h5$close_all()
 }
-

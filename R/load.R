@@ -4,7 +4,7 @@ read_matrice_matrix <- function(h5data) {
     p <- h5data[["indptr"]][]
     x <- h5data[["data"]][]
 
-    X <- if (getEncodingType(h5data) == "csr_matrix") {
+    X <- if ("csr_matrix" %in% getEncodingType(h5data)) {
       Matrix::sparseMatrix(i = i, p = p, x = x, dims = rev(getShape(h5data)), index1 = FALSE)
     } else {
       Matrix::t(Matrix::sparseMatrix(j = i, p = p, x = x, dims = getShape(h5data), index1 = FALSE))
@@ -16,21 +16,25 @@ read_matrice_matrix <- function(h5data) {
   }
 }
 
+# name <- names(h5layer)[[1]]
+# h5data <- group_h5layer
 read_matrix <- function(h5layer, useBPcells = FALSE, cellNames = NULL, geneNames = NULL) {
   data_list <- list()
   for (name in names(h5layer)) {
     group_h5layer <- h5layer[[name]]
-    if (getEncodingType(h5layer) == "array") {
-      data_list[[name]] <- group_h5layer[, ]
+    if ("array" %in% getEncodingType(h5layer)) {
+      data_list[[name]] <- t(group_h5layer[, ])
     } else {
       if (useBPcells) {
         data_list[[name]] <- as(read_matrice_matrix(group_h5layer), "IterableMatrix")
       } else {
-        data_list[[name]] <- read_matrice_matrix(group_h5layer)
+        data_list[[name]] <- read_matrice_matrix(h5data = group_h5layer)
       }
     }
   }
-
+  # dim(data_list[[1]])
+  # dim(data_list[[2]])
+  # rbind(data_list[[1]], data_list[[2]])
   all_data <- do.call(cbind, data_list)
   if (!is.null(cellNames)) {
     colnames(all_data) <- cellNames
@@ -44,11 +48,11 @@ read_matrix <- function(h5layer, useBPcells = FALSE, cellNames = NULL, geneNames
 
 h5_to_X <- function(h5, assay = "RNA", layer = "rawdata", useBPcells = FALSE, useDisk = TRUE, cellNames = NULL, geneNames = NULL) {
   if (is.null(cellNames)) {
-    cellNames <- h5[["obs"]][["_index"]][]
+    cellNames <- h5[["names_obs"]][]
   }
 
   if (is.null(geneNames)) {
-    geneNames <- h5[["var"]][[varType]][["_index"]][]
+    geneNames <- h5[["names_var"]][]
   }
 
   h5layer <- h5[["assay"]][[assay]][["layers"]][[layer]]
@@ -77,6 +81,9 @@ h5_to_X <- function(h5, assay = "RNA", layer = "rawdata", useBPcells = FALSE, us
 }
 
 h5_to_DF <- function(h5data) {
+  if (h5data[["_index"]]$dims == 0) {
+    return(NULL)
+  }
   rownamesStr <- NULL
   for (name in names(h5data)) {
     if (name == "_index") {
@@ -89,7 +96,7 @@ h5_to_DF <- function(h5data) {
     if (name == "_index") {
       next
     }
-    if (getEncodingType(h5data[[name]]) == "categorical") {
+    if ("categorical" %in% getEncodingType(h5data[[name]])) {
       values_attr <- h5data[[name]]
       labelName <- values_attr[["categories"]][]
       values <- values_attr[["codes"]][]
@@ -275,7 +282,6 @@ h5_to_seurat <- function(h5,
   rawX <- h5_to_X(h5, assay, layer = "rawdata", useBPcells = useBPcells, useDisk = useDisk, cellNames = cellNames, geneNames = geneNames)
   sce <- Seurat::CreateSeuratObject(counts = rawX, assay = assay, project = "scanpy")
 
-
   if (calData) {
     sce <- Seurat::NormalizeData(sce)
   }
@@ -315,7 +321,9 @@ h5_to_seurat <- function(h5,
     } else {
       if ("data" %in% layersNames) {
         print("please set 'calData = TRUE' if you want to calculate scale data, load scale data from h5 file")
-        scaleX <- h5_to_X(h5, assay, "data")
+        scaleX <- h5_to_X(h5, assay, layer = "data")
+        scaleX <- h5_to_X(h5, assay, layer = "data", cellNames = cellNames, geneNames = geneNames)
+        rawX <- h5_to_X(h5, assay, layer = "rawdata", useBPcells = useBPcells, useDisk = useDisk, cellNames = cellNames, geneNames = geneNames)
         sce@assays[[assay]]@layers$scale.data <- NULL
         sce@assays[[assay]]@layers$scale.data <- scaleX
       } else {
@@ -327,8 +335,13 @@ h5_to_seurat <- function(h5,
   } else {
     if ("data" %in% layersNames) {
       scaleX <- h5_to_X(h5, assay, "data")
-      sce@assays[[assay]]@layers$scale.data <- NULL
-      sce@assays[[assay]]@layers$scale.data <- scaleX
+      if (SeuratVersion == 5) {
+        sce@assays[[assay]]@layers$scale.data <- NULL
+        sce@assays[[assay]]@layers$scale.data <- scaleX
+      } else {
+        sce@assays[[assay]]@scale.data <- scaleX
+      }
+
       if (all(dim(scaleX) != dim(sce))) {
         print("the dim of scale data is not equal to the dim of raw data, please set 'calScale = TRUE' to calculate new scale data")
       }
@@ -350,12 +363,12 @@ h5_to_seurat <- function(h5,
     sce <- sce_add_h5_to_reductions(sce, h5, cellNames, assay, reductionsName = "reductions")
   }
 
-  # JoinLayers
-  if (SeuratVersion == 5) {
-    if (exists("scaleX") && all(dim(scaleX) == dim(sce))) {
-      sce <- SeuratObject::JoinLayers(sce, assay = assay)
-    }
-  }
+  # # JoinLayers
+  # if (SeuratVersion == 5) {
+  #   if (!exists("scaleX") && all(dim(scaleX) == dim(sce))) {
+  #     sce <- SeuratObject::JoinLayers(sce, assay = assay)
+  #   }
+  # }
 
   # 添加uns
   uns <- h5_to_uns(h5[["uns"]])
@@ -367,3 +380,4 @@ h5_to_seurat <- function(h5,
 
   return(sce)
 }
+
