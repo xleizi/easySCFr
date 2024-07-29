@@ -13,6 +13,7 @@ loadH5(
   calData = TRUE,
   calScale = FALSE,
   calFeatures = FALSE,
+  group_by = NULL,
   readType = "Seurat"
 )
 }
