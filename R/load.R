@@ -243,8 +243,40 @@ loadH5 <- function(FileName,
                    calData = TRUE,
                    calScale = FALSE,
                    calFeatures = FALSE,
+                   group_by = NULL,
                    readType = "Seurat") {
   options(warn = -1)
+  if (!readType %in% c("Seurat", "monocle2", "monocle3", "cellchat", "SingleCellExperiment")) {
+    stop("readType should be one of Seurat, monocle2, monocle3")
+  }
+
+  if (readType == "monocle2") {
+    if (!require(monocle)) {
+      stop("The monocle package is not installed, please install it first.")
+    }
+  }
+
+  if (readType == "monocle3") {
+    if (!require(monocle3)) {
+      stop("The monocle3 package is not installed, please install it first.")
+    }
+  }
+
+  if (readType == "cellchat") {
+    if (!require(CellChat)) {
+      stop("The cellchat package is not installed, please install it first.")
+    }
+    if (is.null(group_by)) {
+      stop("group_by should be specified for cellchat data.")
+    }
+  }
+
+  if (readType == "SingleCellExperiment") {
+    if (!require(SingleCellExperiment)) {
+      stop("The SingleCellExperiment package is not installed, please install it first.")
+    }
+  }
+
   h5 <- openH5(FileName)
   tryCatch(
     {
@@ -260,7 +292,91 @@ loadH5 <- function(FileName,
 
   if (readType == "Seurat") {
     return(sce)
+  } else if (readType == "monocle2") {
+    library(monocle)
+    cds <- Seurat_to_Monocle2(sce, assay = assay, SeuratVersion = SeuratVersion)
+    return(cds)
+  } else if (readType == "monocle3") {
+    library(monocle3)
+    cds <- Seurat_to_Monocle3(sce, assay = assay, SeuratVersion = SeuratVersion)
+    return(cds)
+  } else if (readType == "cellchat") {
+    loadlayers <- "data"
+    if (SeuratVersion == 5) {
+      if (!("data" %in% names(sce@assays[[assay]]@layers)) & !calData) {
+        print("No data found in the h5 file and calData is FALSE, using the counts in the SeuratObject.")
+        loadlayers <- "counts"
+      }
+    }
+    cellchatdata <- Seurat_to_cellchat(sce, assay = assay, SeuratVersion = SeuratVersion, group_by = group_by, loadlayers = loadlayers)
+    return(cellchatdata)
+  } else if (readType == "SingleCellExperiment") {
+    SingleCellData <- Seurat::as.SingleCellExperiment(sce)
+    return(SingleCellData)
+  } else {
+    return(sce)
   }
+}
+
+Seurat_to_cellchat <- function(
+    sce,
+    assay = "RNA",
+    SeuratVersion = checkSeuratVersion(),
+    group_by = "orig.ident",
+    loadlayers = "data") {
+  if (SeuratVersion == 4) {
+    data <- SeuratObject::GetAssayData(object = sce, assay = assay, slot = loadlayers)
+  } else if (SeuratVersion == 5) {
+    data <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = loadlayers)
+  }
+  meta <- sce@meta.data
+  cellchat <- createCellChat(object = data, meta = meta, group.by = group_by)
+  return(cellchat)
+}
+
+Seurat_to_Monocle3 <- function(
+    sce,
+    assay = "RNA",
+    SeuratVersion = checkSeuratVersion()) {
+  if (SeuratVersion == 4) {
+    data <- SeuratObject::GetAssayData(object = sce, assay = assay, slot = "counts")
+  } else if (SeuratVersion == 5) {
+    data <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = "counts")
+  }
+
+  cell_metadata <- sce@meta.data
+  gene_annotation <- data.frame(gene_short_name = rownames(sce))
+  rownames(gene_annotation) <- rownames(sce)
+
+  cds <- monocle3::new_cell_data_set(data,
+    cell_metadata = cell_metadata,
+    gene_metadata = gene_annotation
+  )
+  return(cds)
+}
+
+Seurat_to_Monocle2 <- function(
+    sce,
+    assay = "RNA",
+    SeuratVersion = checkSeuratVersion()) {
+  if (SeuratVersion == 4) {
+    data <- SeuratObject::GetAssayData(object = sce, assay = assay, slot = "counts")
+  } else if (SeuratVersion == 5) {
+    data <- SeuratObject::GetAssayData(object = sce, assay = assay, layer = "counts")
+  }
+
+  data <- as(as.matrix(data), "sparseMatrix")
+  pd <- new("AnnotatedDataFrame", data = sce@meta.data)
+  fData <- data.frame(gene_short_name = row.names(data), row.names = row.names(data))
+  fd <- new("AnnotatedDataFrame", data = fData)
+
+  cds <- monocle::newCellDataSet(data,
+    phenoData = pd,
+    featureData = fd,
+    lowerDetectionLimit = 0.1,
+    expressionFamily = negbinomial.size()
+  )
+  return(cds)
 }
 
 h5_to_seurat <- function(h5,
@@ -380,4 +496,3 @@ h5_to_seurat <- function(h5,
 
   return(sce)
 }
-

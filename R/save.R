@@ -244,7 +244,6 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   assayListsCur <- assayList$create_group(assay)
   layersList <- assayListsCur$create_group("layers")
 
-
   if (SeuratVersion == 4) {
     rawData <- SeuratObject::GetAssayData(object = sce, assay = assay, slot = "counts")
     scaleData <- SeuratObject::GetAssayData(object = sce, assay = assay, slot = "scale.data")
