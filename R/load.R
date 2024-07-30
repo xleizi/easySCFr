@@ -23,7 +23,7 @@ read_matrix <- function(h5layer, useBPcells = FALSE, cellNames = NULL, geneNames
   for (name in names(h5layer)) {
     group_h5layer <- h5layer[[name]]
     if ("array" %in% getEncodingType(h5layer)) {
-      data_list[[name]] <- t(group_h5layer[, ])
+      data_list[[name]] <- group_h5layer[, ]
     } else {
       if (useBPcells) {
         data_list[[name]] <- as(read_matrice_matrix(group_h5layer), "IterableMatrix")
@@ -32,14 +32,15 @@ read_matrix <- function(h5layer, useBPcells = FALSE, cellNames = NULL, geneNames
       }
     }
   }
+
   # dim(data_list[[1]])
   # dim(data_list[[2]])
   # rbind(data_list[[1]], data_list[[2]])
   all_data <- do.call(cbind, data_list)
-  if (!is.null(cellNames)) {
+  if (!is.null(cellNames) & ncol(all_data) == length(cellNames)) {
     colnames(all_data) <- cellNames
   }
-  if (!is.null(geneNames)) {
+  if (!is.null(geneNames) & nrow(all_data) == length(geneNames)) {
     rownames(all_data) <- geneNames
   }
   return(all_data)
@@ -280,7 +281,7 @@ loadH5 <- function(FileName,
   h5 <- openH5(FileName)
   tryCatch(
     {
-      sce <- h5_to_seurat(h5, assay, SeuratVersion, useBPcells = useBPcells, useDisk = useDisk, calData, calScale, calFeatures)
+      sce <- h5_to_seurat(h5, assay, SeuratVersion, useBPcells = useBPcells, useDisk = useDisk, calData = calData, calScale = calScale, calFeatures = calFeatures)
     },
     error = function(e) {
       print(e)

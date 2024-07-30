@@ -49,7 +49,8 @@ X_to_h5 <- function(
     sce_X <- as(sce_X, "RsparseMatrix")
   }
   if ("matrix" %in% class(sce_X)) {
-    sce_X <- Matrix::t(sce_X)
+    # sce_X <- Matrix::t(sce_X)
+    # sce_X <- sce_X
   }
   if (!is.null(attr(class(sce_X), "package"))) {
     if (attr(class(sce_X), "package") == "BPCells") {
@@ -90,6 +91,7 @@ handle_data_splitting <- function(
     sce_X, h5data, data_name,
     split_save = TRUE,
     max_cells_per_subset = 5000) {
+      
   if ("dgRMatrix" %in% class(sce_X)) {
     Xclass <- "csr_matrix"
   } else if ("dgCMatrix" %in% class(sce_X)) {
@@ -104,7 +106,6 @@ handle_data_splitting <- function(
   h5AddAttribute(h5data_Name, "encoding-type", Xclass)
   h5AddAttribute(h5data_Name, "encoding-version", "0.1.0")
   h5AddAttribute(h5data_Name, "shape", dim(sce_X))
-
 
   num_cells <- nrow(sce_X)
   if (num_cells > 200000 & !split_save) {
@@ -136,8 +137,8 @@ write_matrix <- function(h5data, matrix, name) {
       matrix <- as(matrix, "RsparseMatrix")
     }
   }
-
-
+  
+  
   if ("matrix" %in% class(matrix)) {
     h5data[[name]] <- matrix
     h5AddAttribute(h5data[[name]], "encoding-type", "array")
@@ -155,7 +156,6 @@ write_matrix <- function(h5data, matrix, name) {
     print(paste0("Error in writing matrix: ", class(matrix)))
   }
 }
-
 
 
 # 将数据写入 HDF5 文件
@@ -256,17 +256,11 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     varObjName <- "meta.data"
   }
 
-  # sce_X = rawData
-  # h5data = layersList
-  # data_name = "rawdata"
   X_to_h5(
     sce_X = rawData, h5data = layersList, data_name = "rawdata",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
   )
-  # class(scaleData)
-  # sce_X = scaleData
-  # h5data = layersList
-  # data_name = "data"
+
   X_to_h5(
     sce_X = scaleData, h5data = layersList, data_name = "data",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
@@ -277,6 +271,7 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
 
   rawvarh5 <- varList$create_group("rawvar")
   rawvar <- slot(object = sce@assays[[assay]], name = varObjName)
+  rownames(rawvar) <- rownames(sce)
   df_to_h5(rawvarh5, rawvar)
 
   if (!is.null(Seurat::VariableFeatures(sce))) {
