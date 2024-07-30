@@ -480,13 +480,6 @@ h5_to_seurat <- function(h5,
     sce <- sce_add_h5_to_reductions(sce, h5, cellNames, assay, reductionsName = "reductions")
   }
 
-  # # JoinLayers
-  # if (SeuratVersion == 5) {
-  #   if (!exists("scaleX") && all(dim(scaleX) == dim(sce))) {
-  #     sce <- SeuratObject::JoinLayers(sce, assay = assay)
-  #   }
-  # }
-
   # 添加uns
   uns <- h5_to_uns(h5[["uns"]])
   for (unsName in names(uns)) {

@@ -48,10 +48,10 @@ X_to_h5 <- function(
   if ("Graph" %in% class(sce_X)) {
     sce_X <- as(sce_X, "RsparseMatrix")
   }
-  if ("matrix" %in% class(sce_X)) {
-    # sce_X <- Matrix::t(sce_X)
-    # sce_X <- sce_X
-  }
+  # if ("matrix" %in% class(sce_X)) {
+  #   # sce_X <- Matrix::t(sce_X)
+  #   # sce_X <- sce_X
+  # }
   if (!is.null(attr(class(sce_X), "package"))) {
     if (attr(class(sce_X), "package") == "BPCells") {
       sce_X <- Matrix::t(sce_X)
@@ -91,7 +91,6 @@ handle_data_splitting <- function(
     sce_X, h5data, data_name,
     split_save = TRUE,
     max_cells_per_subset = 5000) {
-      
   if ("dgRMatrix" %in% class(sce_X)) {
     Xclass <- "csr_matrix"
   } else if ("dgCMatrix" %in% class(sce_X)) {
@@ -137,8 +136,8 @@ write_matrix <- function(h5data, matrix, name) {
       matrix <- as(matrix, "RsparseMatrix")
     }
   }
-  
-  
+
+
   if ("matrix" %in% class(matrix)) {
     h5data[[name]] <- matrix
     h5AddAttribute(h5data[[name]], "encoding-type", "array")
