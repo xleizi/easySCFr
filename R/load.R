@@ -487,7 +487,6 @@ h5_to_seurat <- function(h5,
   #   }
   # }
 
-  print("1111111111111111111")
   # 添加uns
   uns <- h5_to_uns(h5[["uns"]])
   for (unsName in names(uns)) {
@@ -495,7 +494,6 @@ h5_to_seurat <- function(h5,
     # attr(uns[[unsName]], "package") <- "SeuratObject"
     sce@commands[[unsName]] <- uns[[unsName]]
   }
-  print("22222222222222222")
 
   return(sce)
 }
