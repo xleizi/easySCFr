@@ -184,7 +184,7 @@ sce_add_h5_to_graphs <- function(sce, h5, cellNames, graphsName = "graphs") {
         sce@graphs[[name]] <- Seurat::as.Graph(Graphmt)
       },
       error = function(e) {
-        print(paste0("Error in reading graph ", name, ": ", e$message))
+        print(paste0("Reading graph ", name, ": ", e$message, "failed."))
       }
     )
   }
@@ -203,6 +203,7 @@ sce_add_h5_to_var <- function(sce, h5, assay, varName = "var", SeuratVersion = c
 }
 
 sce_add_h5_to_reductions <- function(sce, h5, cellNames, assay = "RNA", reductionsName = "reductions") {
+  name <- names(h5[[reductionsName]])[[1]]
   for (name in names(h5[[reductionsName]])) {
     tryCatch(
       {
@@ -215,7 +216,7 @@ sce_add_h5_to_reductions <- function(sce, h5, cellNames, assay = "RNA", reductio
         )
       },
       error = function(e) {
-        print(paste0("Error in reading reductions ", name, ": ", e$message))
+        print(paste0("Reading reductions ", name, ": ", e$message, "failed."))
       }
     )
   }
@@ -252,7 +253,7 @@ loadH5 <- function(FileName,
   }
 
   if (readType == "monocle2") {
-    if (!require(monocle)) {
+    if(!require(monocle)){
       stop("The monocle package is not installed, please install it first.")
     }
   }
@@ -277,7 +278,7 @@ loadH5 <- function(FileName,
       stop("The SingleCellExperiment package is not installed, please install it first.")
     }
   }
-
+  
   h5 <- openH5(FileName)
   tryCatch(
     {
@@ -311,7 +312,7 @@ loadH5 <- function(FileName,
     }
     cellchatdata <- Seurat_to_cellchat(sce, assay = assay, SeuratVersion = SeuratVersion, group_by = group_by, loadlayers = loadlayers)
     return(cellchatdata)
-  } else if (readType == "SingleCellExperiment") {
+  }else if (readType == "SingleCellExperiment") {
     SingleCellData <- Seurat::as.SingleCellExperiment(sce)
     return(SingleCellData)
   } else {
@@ -469,7 +470,6 @@ h5_to_seurat <- function(h5,
 
   # obs
   sce <- Seurat::AddMetaData(sce, h5_to_obs(h5, "obs"))
-
   # graphs
   if ("graphs" %in% names(h5)) {
     sce <- sce_add_h5_to_graphs(sce, h5, cellNames, "graphs")
@@ -480,6 +480,14 @@ h5_to_seurat <- function(h5,
     sce <- sce_add_h5_to_reductions(sce, h5, cellNames, assay, reductionsName = "reductions")
   }
 
+  # # JoinLayers
+  # if (SeuratVersion == 5) {
+  #   if (!exists("scaleX") && all(dim(scaleX) == dim(sce))) {
+  #     sce <- SeuratObject::JoinLayers(sce, assay = assay)
+  #   }
+  # }
+
+  print("1111111111111111111")
   # 添加uns
   uns <- h5_to_uns(h5[["uns"]])
   for (unsName in names(uns)) {
@@ -487,6 +495,7 @@ h5_to_seurat <- function(h5,
     # attr(uns[[unsName]], "package") <- "SeuratObject"
     sce@commands[[unsName]] <- uns[[unsName]]
   }
+  print("22222222222222222")
 
   return(sce)
 }
