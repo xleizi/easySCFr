@@ -1,4 +1,7 @@
 df_to_h5 <- function(h5data, df) {
+  if (nrow(df) == 0 | ncol(df) == 0) {
+    return(NULL)
+  }
   h5AddAttribute(h5data, "encoding-type", "dataframe")
   h5AddAttribute(h5data, "shape", dim(df))
   h5AddAttribute(h5data, "column-order", colnames(df))
@@ -214,21 +217,42 @@ commands_to_h5 <- function(data, h5file, group_path) {
 #' @export
 #'
 #' @examples
-saveH5 <- function(FileName, data, assay = "RNA",
+saveH5 <- function(data, FileName, assay = "RNA",
                    save_graph = TRUE,
                    SeuratVersion = checkSeuratVersion(),
+                   image_name = NULL,
                    split_save = TRUE,
                    max_cells_per_subset = 5000) {
-  data <- Seurat_to_H5(FileName, data, assay = assay, save_graph = save_graph, SeuratVersion = SeuratVersion, split_save = split_save, max_cells_per_subset = max_cells_per_subset)
+  h5 <- hdf5r::H5File$new(FileName, "w")
+  tryCatch(
+    {
+      data <- Seurat_to_H5(h5, data,
+        assay = assay,
+        save_graph = save_graph,
+        SeuratVersion = SeuratVersion,
+        split_save = split_save,
+        image_name = image_name,
+        max_cells_per_subset = max_cells_per_subset
+      )
+    },
+    error = function(e) {
+      print(e)
+    },
+    finally = {
+      h5$close_all()
+    }
+  )
+
   if ("Seurat" %in% class(data)) {
     return(data)
   }
 }
 
-Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
+Seurat_to_H5 <- function(h5, sce, assay = "RNA",
                          save_graph = TRUE,
                          SeuratVersion = checkSeuratVersion(),
                          split_save = TRUE,
+                         image_name = NULL,
                          max_cells_per_subset = 5000) {
   if (SeuratVersion == 5) {
     if ("Assay" %in% class(sce[[assay]])) {
@@ -236,8 +260,8 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     }
     sce <- SeuratObject::JoinLayers(sce, assay = assay)
   }
-  h5 <- hdf5r::H5File$new(FileName, "w")
 
+  print("Saving X ...")
   # X
   assayList <- h5$create_group("assay")
   assayListsCur <- assayList$create_group(assay)
@@ -254,7 +278,6 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     # var
     varObjName <- "meta.data"
   }
-
   X_to_h5(
     sce_X = rawData, h5data = layersList, data_name = "rawdata",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
@@ -265,12 +288,13 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     split_save = split_save, max_cells_per_subset = max_cells_per_subset
   )
 
+  print("Saving var ...")
   # var
   varList <- h5$create_group("var")
 
   rawvarh5 <- varList$create_group("rawvar")
   rawvar <- slot(object = sce@assays[[assay]], name = varObjName)
-  rownames(rawvar) <- rownames(sce)
+  rownames(rawvar) <- rownames(sce@assays[[assay]])
   df_to_h5(rawvarh5, rawvar)
 
   if (!is.null(Seurat::VariableFeatures(sce))) {
@@ -280,10 +304,14 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
   }
 
   # obs
+  print("Saving obs ...")
+  meta <- sce@meta.data
+  meta <- meta[colnames(rawData), ]
   obs <- h5$create_group("obs")
-  df_to_h5(obs, sce@meta.data)
+  df_to_h5(obs, meta)
 
   # reductions
+  print("Saving reductions ...")
   if (length(sce@reductions) > 0) {
     reductions_to_h5(sce, h5, "reductions")
     # tryCatch(
@@ -296,16 +324,45 @@ Seurat_to_H5 <- function(FileName, sce, assay = "RNA",
     # )
   }
 
-
   # graphs
+  print("Saving graphs ...")
   if (length(sce@graphs) > 0 & save_graph) {
     graphs_to_h5(sce, h5, "graphs")
   }
 
   # names
-  h5[["names_var"]] <- rownames(sce)
-  h5[["names_obs"]] <- colnames(sce)
+  h5[["names_var"]] <- rownames(sce@assays[[assay]])
+  h5[["names_obs"]] <- colnames(sce@assays[[assay]])
 
-  commands_to_h5(sce@commands, h5, "uns")
-  h5$close_all()
+  print("Saving commands ...")
+  if (length(sce@commands) > 0) {
+    commands_to_h5(sce@commands, h5, "uns")
+  }
+
+  print("Saving image ...")
+  images_to_h5(sce, h5, image_name)
+}
+
+
+images_to_h5 <- function(sce, h5obj, image_name = NULL) {
+  sceimages <- sce@images
+  if (length(sceimages) > 0) {
+    if (!is.null(image_name)) {
+      sceimage <- sceimages[[image_name]]
+    } else {
+      sceimage <- sceimages[[1]]
+    }
+  } else {
+    return(NULL)
+  }
+  images <- h5obj$create_group("images")
+  scale_factors <- sceimage@scale.factors
+  images[["image"]] <- sceimage@image
+  images[["coords"]] <- sceimage@boundaries[["centroids"]]@coords
+  # images[["radius"]] <- sceimage@boundaries[["centroids"]]@radius
+  scalefactors <- images$create_group("scale_factors")
+  scalefactors[["spot"]] <- scale_factors$spot
+  scalefactors[["fiducial"]] <- scale_factors$fiducial
+  scalefactors[["hires"]] <- scale_factors$hires
+  scalefactors[["lowres"]] <- scale_factors$lowres
 }

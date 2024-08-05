@@ -53,7 +53,11 @@ h5_to_X <- function(h5, assay = "RNA", layer = "rawdata", useBPcells = FALSE, us
   }
 
   if (is.null(geneNames)) {
-    geneNames <- h5[["names_var"]][]
+    if (layer == "rawdata") {
+      geneNames <- h5[["var/rawvar/_index"]][]
+    } else {
+      geneNames <- h5[["names_var"]][]
+    }
   }
 
   h5layer <- h5[["assay"]][[assay]][["layers"]][[layer]]
@@ -240,6 +244,7 @@ sce_add_h5_to_reductions <- function(sce, h5, cellNames, assay = "RNA", reductio
 loadH5 <- function(FileName,
                    assay = "RNA",
                    SeuratVersion = checkSeuratVersion(),
+                   image_name = "Spatial",
                    useBPcells = FALSE,
                    useDisk = TRUE,
                    calData = TRUE,
@@ -253,7 +258,7 @@ loadH5 <- function(FileName,
   }
 
   if (readType == "monocle2") {
-    if(!require(monocle)){
+    if (!require(monocle)) {
       stop("The monocle package is not installed, please install it first.")
     }
   }
@@ -278,11 +283,14 @@ loadH5 <- function(FileName,
       stop("The SingleCellExperiment package is not installed, please install it first.")
     }
   }
-  
+
   h5 <- openH5(FileName)
   tryCatch(
     {
-      sce <- h5_to_seurat(h5, assay, SeuratVersion, useBPcells = useBPcells, useDisk = useDisk, calData = calData, calScale = calScale, calFeatures = calFeatures)
+      sce <- h5_to_seurat(h5, assay, SeuratVersion,
+        image_name = image_name,
+        useBPcells = useBPcells, useDisk = useDisk, calData = calData, calScale = calScale, calFeatures = calFeatures
+      )
     },
     error = function(e) {
       print(e)
@@ -312,7 +320,7 @@ loadH5 <- function(FileName,
     }
     cellchatdata <- Seurat_to_cellchat(sce, assay = assay, SeuratVersion = SeuratVersion, group_by = group_by, loadlayers = loadlayers)
     return(cellchatdata)
-  }else if (readType == "SingleCellExperiment") {
+  } else if (readType == "SingleCellExperiment") {
     SingleCellData <- Seurat::as.SingleCellExperiment(sce)
     return(SingleCellData)
   } else {
@@ -384,6 +392,7 @@ Seurat_to_Monocle2 <- function(
 h5_to_seurat <- function(h5,
                          assay = "RNA",
                          SeuratVersion = checkSeuratVersion(),
+                         image_name = "Spatial",
                          useBPcells = FALSE,
                          useDisk = TRUE,
                          calData = TRUE,
@@ -391,31 +400,38 @@ h5_to_seurat <- function(h5,
                          calFeatures = FALSE) {
   cellNames <- h5[["names_obs"]][]
   geneNames <- h5[["names_var"]][]
-
-  # 1 如果存在data, data -> sce@data, rawdata -> sce@counts,var的行名 -> sce@assays[["RNA"]]@var.feature
+  allgeneNames <- h5[["var/rawvar/_index"]][]
+  print(sprintf("there is assay: %s in the h5 file", names(h5[["assay"]])))
+  # 1 如果存在data, data ->"" sce@data, rawdata -> sce@counts,var的行名 -> sce@assays[["RNA"]]@var.feature
   # 2 如果不存在data, rawdata -> sce@counts
   # assay
   layersNames <- names(h5[["assay"]][[assay]][["layers"]])
-  layer <- "rawdata"
-  rawX <- h5_to_X(h5, assay, layer = "rawdata", useBPcells = useBPcells, useDisk = useDisk, cellNames = cellNames, geneNames = geneNames)
+  print("Reading raw data...")
+  # layer <- "rawdata"
+  rawX <- h5_to_X(h5, assay, layer = "rawdata", useBPcells = useBPcells, useDisk = useDisk, cellNames = cellNames, geneNames = allgeneNames)
   sce <- Seurat::CreateSeuratObject(counts = rawX, assay = assay, project = "scanpy")
-
+  print("Normalization counts...")
   if (calData) {
     sce <- Seurat::NormalizeData(sce)
   }
 
+  print("Add var...")
+  # var
+  sce <- sce_add_h5_to_var(sce, h5, assay, "var")
+
+  print("Add Feature...")
   # Features
   if (calFeatures) {
-    if (is.null(sce@assays[[assay]]@layers$scale.data)) {
-      if ("data" %in% layersNames) {
-        print("there is no scale data in h5 files and calScale is FALSE, skip FindVariableFeatures")
-        Seurat::VariableFeatures(sce) <- rownames(h5_to_DF(h5[["var"]][["var"]]))
-      } else {
-        print("there is no scale data in h5 files and calScale is FALSE, please set both 'calData = TRUE' and 'calScale = TRUE' to calculate scale data")
-      }
-    } else {
-      sce <- Seurat::FindVariableFeatures(sce, selection.method = "vst", nfeatures = 2000)
-    }
+    # if (is.null(sce@assays[[assay]]@layers$scale.data)) {
+    #   if ("data" %in% layersNames) {
+    #     print("there is no scale data in h5 files and calScale is FALSE, skip FindVariableFeatures")
+    #     Seurat::VariableFeatures(sce) <- rownames(h5_to_DF(h5[["var"]][["var"]]))
+    #   } else {
+    #     print("there is no scale data in h5 files and calScale is FALSE, please set both 'calData = TRUE' and 'calScale = TRUE' to calculate scale data")
+    #   }
+    # } else {
+    sce <- Seurat::FindVariableFeatures(sce, selection.method = "vst", nfeatures = 2000)
+    # }
   } else {
     if ("data" %in% layersNames) {
       print("load features from h5 file")
@@ -425,9 +441,7 @@ h5_to_seurat <- function(h5,
     }
   }
 
-  # var
-  sce <- sce_add_h5_to_var(sce, h5, assay, "var")
-
+  print("Add Scale...")
   # 如果calScale为TRUE，则计算scale数据，不读取data
   # 如果calScale为FALSE，且data存在，则读取data，不计算scale数据
   # 如果calScale为FALSE，且data存在，则读取data，判断dim是否一致，不一致则抛出提醒，是否calScale
@@ -439,9 +453,7 @@ h5_to_seurat <- function(h5,
     } else {
       if ("data" %in% layersNames) {
         print("please set 'calData = TRUE' if you want to calculate scale data, load scale data from h5 file")
-        scaleX <- h5_to_X(h5, assay, layer = "data")
         scaleX <- h5_to_X(h5, assay, layer = "data", cellNames = cellNames, geneNames = geneNames)
-        rawX <- h5_to_X(h5, assay, layer = "rawdata", useBPcells = useBPcells, useDisk = useDisk, cellNames = cellNames, geneNames = geneNames)
         sce@assays[[assay]]@layers$scale.data <- NULL
         sce@assays[[assay]]@layers$scale.data <- scaleX
       } else {
@@ -468,6 +480,7 @@ h5_to_seurat <- function(h5,
     }
   }
 
+  print("Add obs...")
   # obs
   sce <- Seurat::AddMetaData(sce, h5_to_obs(h5, "obs"))
   # graphs
@@ -475,6 +488,7 @@ h5_to_seurat <- function(h5,
     sce <- sce_add_h5_to_graphs(sce, h5, cellNames, "graphs")
   }
 
+  print("Add reductions...")
   # reductions
   if ("reductions" %in% names(h5)) {
     sce <- sce_add_h5_to_reductions(sce, h5, cellNames, assay, reductionsName = "reductions")
@@ -487,13 +501,54 @@ h5_to_seurat <- function(h5,
   #   }
   # }
 
+  print("Add uns...")
   # 添加uns
-  uns <- h5_to_uns(h5[["uns"]])
-  for (unsName in names(uns)) {
-    # class(uns[[unsName]]) <- "SeuratCommand"
-    # attr(uns[[unsName]], "package") <- "SeuratObject"
-    sce@commands[[unsName]] <- uns[[unsName]]
+  if ("uns" %in% names(h5)) {
+    uns <- h5_to_uns(h5[["uns"]])
+    for (unsName in names(uns)) {
+      # class(uns[[unsName]]) <- "SeuratCommand"
+      # attr(uns[[unsName]], "package") <- "SeuratObject"
+      sce@commands[[unsName]] <- uns[[unsName]]
+    }
   }
 
+  print("Add images...")
+  if ("images" %in% names(h5)) {
+    images <- h5_to_images(h5[["images"]], assay, image_name = image_name, cellNames = cellNames)
+  }
+  sce@images[[image_name]] <- images
   return(sce)
+}
+
+h5_to_images <- function(images, assay, image_name = NULL, cellNames = NULL) {
+  library(Seurat)
+  coords <- as.data.frame(images[["coords"]][, ])
+  if (!is.null(cellNames)) {
+    rownames(coords) <- cellNames
+  }
+  colnames(coords) <- c("imagerow", "imagecol")
+  image <- images[["image"]][, , ]
+  scale_factors <- images[["scale_factors"]]
+  fiducial <- scale_factors[["fiducial"]][]
+  hires <- scale_factors[["hires"]][]
+  lowres <- scale_factors[["lowres"]][]
+  spot <- scale_factors[["spot"]][]
+
+  scale.factors <- scalefactors(
+    spot = spot,
+    fiducial = fiducial,
+    hires = hires,
+    lowres = lowres
+  )
+  fov <- CreateFOV(as.data.frame(coords),
+    type = "centroids", radius = spot,
+    assay = assay, key = Key(image_name, quiet = TRUE)
+  )
+  visium.fov <- new(
+    Class = "VisiumV2", boundaries = fov@boundaries,
+    molecules = fov@molecules, assay = fov@assay, key = fov@key,
+    image = image, scale.factors = scale.factors
+  )
+  # visium.fov@project.name <- image_name
+  return(visium.fov)
 }
